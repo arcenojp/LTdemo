@@ -6,7 +6,7 @@
   <title>Laundry Tracker – Customer</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
-    /* Same base styles as before, but adapted for mobile */
+    /* (same styles as before, no changes needed) */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #e9eef3; font-family: system-ui, sans-serif; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .app-container { max-width: 480px; width: 100%; background: white; border-radius: 32px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); overflow: hidden; min-height: 600px; display: flex; flex-direction: column; }
@@ -38,6 +38,7 @@
     .rating-stars { display: flex; justify-content: center; gap: 15px; margin: 15px 0; font-size: 2rem; cursor: pointer; }
     .rating-stars i { color: #cbd5e1; transition: 0.1s; }
     .rating-stars i.selected { color: #fbbf24; }
+    .refresh-track { background: none; border: none; color: #2c3e66; font-size: 0.8rem; cursor: pointer; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -66,7 +67,6 @@
     localStorage.setItem("laundryOrders", JSON.stringify(orders));
   }
 
-  // Helper: add/update an order
   function saveOrder(order) {
     const orders = getOrders();
     const existingIndex = orders.findIndex(o => o.id === order.id);
@@ -86,6 +86,7 @@
   let currentScreen = "shops"; // shops, orderForm, tracking
   let selectedShop = null;
   let currentOrder = null;
+  let trackingInterval = null; // for polling
 
   function showToast(msg) {
     const toast = document.createElement("div");
@@ -104,8 +105,45 @@
     showToast(`✨ Order ${order.id} is ready for pickup!`);
   }
 
+  // Stop polling if active
+  function stopTrackingPolling() {
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+      trackingInterval = null;
+    }
+  }
+
+  // Start polling for order status updates
+  function startTrackingPolling() {
+    stopTrackingPolling(); // ensure only one
+    if (!currentOrder) return;
+    trackingInterval = setInterval(() => {
+      // Only poll if we are still on tracking screen and order not completed
+      if (currentScreen !== "tracking" || !currentOrder) {
+        return;
+      }
+      const latestOrder = getOrder(currentOrder.id);
+      if (!latestOrder) {
+        // order might have been deleted
+        showToast("Order not found. Returning to shops.");
+        currentOrder = null;
+        renderShops();
+        return;
+      }
+      // Check if status or completed flag changed
+      if (latestOrder.status !== currentOrder.status || latestOrder.completed !== currentOrder.completed) {
+        // Update currentOrder with latest data
+        currentOrder = latestOrder;
+        // Re-render tracking screen (will restart polling)
+        renderTracking();
+        // If order is completed, we might have moved to rating screen; polling will be stopped there.
+      }
+    }, 3000); // poll every 3 seconds
+  }
+
   // Render shops
   function renderShops() {
+    stopTrackingPolling(); // stop any active polling
     const main = document.getElementById("appMain");
     main.innerHTML = `
       <div class="card">
@@ -136,6 +174,7 @@
   }
 
   function renderOrderForm() {
+    stopTrackingPolling();
     const main = document.getElementById("appMain");
     main.innerHTML = `
       <div class="card">
@@ -209,10 +248,16 @@
   function renderTracking() {
     if (!currentOrder) return renderShops();
 
-    // Refresh order from localStorage in case shop updated it
+    // Refresh order from localStorage
     const updated = getOrder(currentOrder.id);
     if (updated) currentOrder = updated;
     else return renderShops(); // order gone
+
+    // If order is already completed, go to rating screen directly
+    if (currentOrder.completed === true) {
+      showPickupRating();
+      return;
+    }
 
     const status = currentOrder.status;
     const stepMap = { dropped: 1, washing: 2, drying_folding: 3, ready: 4 };
@@ -252,6 +297,7 @@
         <div class="flex-between">
           <h3><i class="fas fa-store"></i> ${currentOrder.shop.name}</h3>
           <span class="order-id">${currentOrder.id}</span>
+          <button id="manualRefreshBtn" class="refresh-track" title="Refresh status"><i class="fas fa-sync-alt"></i></button>
         </div>
         <div><i class="fas fa-weight-hanging"></i> ${currentOrder.weight} lbs • ${currentOrder.service}</div>
         <div><i class="fas fa-note-sticky"></i> ${currentOrder.instructions || "No special instructions"}</div>
@@ -260,19 +306,41 @@
         <div class="status-badge">${statusText}</div>
         ${timelineHtml}
         ${pickupBtn}
-        <div class="text-muted" style="margin-top: 12px;">💡 Shop staff can update status from the shop dashboard.</div>
+        <div class="text-muted" style="margin-top: 12px;">💡 Status updates automatically every few seconds.</div>
       </div>
     `;
 
     const pickupBtnEl = document.getElementById("pickupBtn");
     if (pickupBtnEl) pickupBtnEl.onclick = showPickupRating;
 
+    const manualRefresh = document.getElementById("manualRefreshBtn");
+    if (manualRefresh) {
+      manualRefresh.onclick = () => {
+        const latest = getOrder(currentOrder.id);
+        if (latest) {
+          currentOrder = latest;
+          renderTracking();
+        } else {
+          showToast("Order not found");
+        }
+      };
+    }
+
     document.getElementById("newOrderBtn").style.display = "block";
     currentScreen = "tracking";
+    startTrackingPolling(); // start polling for updates
   }
 
   function showPickupRating() {
-    if (!currentOrder || currentOrder.status !== "ready") return;
+    stopTrackingPolling(); // stop polling while rating
+    if (!currentOrder) return renderShops();
+
+    // If order not yet completed, mark as completed now (if we are here from pickup button)
+    if (!currentOrder.completed && currentOrder.status === 'ready') {
+      currentOrder.completed = true;
+      saveOrder(currentOrder);
+    }
+
     const main = document.getElementById("appMain");
     main.innerHTML = `
       <div class="card" style="text-align: center;">
@@ -306,8 +374,7 @@
 
     document.getElementById("finishOrder").addEventListener("click", () => {
       if (selectedRating > 0) showToast(`⭐ Rated ${selectedRating} stars. Thanks!`);
-      currentOrder.completed = true;
-      saveOrder(currentOrder);
+      // order is already marked completed; we can optionally store rating in localStorage
       currentOrder = null;
       selectedShop = null;
       renderShops();
@@ -317,6 +384,7 @@
   // New order button
   document.getElementById("newOrderBtn").addEventListener("click", () => {
     if (currentOrder && !currentOrder.completed && confirm("Start a new order? Current order will be abandoned.")) {
+      stopTrackingPolling();
       currentOrder = null;
       selectedShop = null;
       renderShops();
