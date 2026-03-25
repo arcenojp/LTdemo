@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laundry Tracker Demo</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #eef2f7;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 32px;
+      padding: 32px;
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 24px;
+      color: #1e293b;
+    }
+    .role-btn {
+      display: block;
+      background: #2c3e66;
+      color: white;
+      text-decoration: none;
+      padding: 16px;
+      border-radius: 40px;
+      margin: 16px 0;
+      font-weight: 600;
+      transition: 0.2s;
+    }
+    .role-btn:hover {
+      background: #1e2b4f;
+      transform: scale(1.02);
+    }
+    .note {
+      margin-top: 24px;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🧺 Laundry Tracker</h1>
+    <p>Choose your role to continue the demo</p>
+    <a href="customer.html" class="role-btn">👤 I'm a Customer</a>
+    <a href="shop.html" class="role-btn">🏪 I'm Shop Staff</a>
+    <div class="note">
+      Orders are stored in your browser. Open both tabs to see live updates.
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Laundry Tracker – Customer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* Same base styles as before, but adapted for mobile */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #e9eef3; font-family: system-ui, sans-serif; padding: 16px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .app-container { max-width: 480px; width: 100%; background: white; border-radius: 32px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); overflow: hidden; min-height: 600px; display: flex; flex-direction: column; }
+    header { background: #2c3e66; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 8px; }
+    .new-order-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 12px; border-radius: 40px; cursor: pointer; }
+    main { flex: 1; padding: 20px; background: #f8fafc; }
+    .card { background: white; border-radius: 24px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .shop-item { border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; }
+    .shop-item:hover { border-color: #2c3e66; transform: translateY(-2px); }
+    .shop-name { font-size: 1.2rem; font-weight: 600; margin-bottom: 6px; }
+    .shop-details { color: #4b5563; font-size: 0.85rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .price { font-weight: bold; color: #2c3e66; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-weight: 500; margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 16px; font-size: 1rem; }
+    button { background: #2c3e66; color: white; border: none; padding: 14px; border-radius: 40px; font-weight: 600; width: 100%; cursor: pointer; }
+    button.secondary { background: #e2e8f0; color: #1e293b; margin-top: 10px; width: auto; padding: 8px 16px; }
+    .timeline { margin: 20px 0; display: flex; justify-content: space-between; }
+    .timeline-step { flex: 1; text-align: center; font-size: 0.7rem; color: #94a3b8; }
+    .timeline-step.active { color: #2c3e66; font-weight: 600; }
+    .timeline-step i { font-size: 1.6rem; display: block; margin-bottom: 6px; background: white; width: 40px; height: 40px; line-height: 40px; border-radius: 40px; margin: 0 auto 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    .status-badge { display: inline-block; background: #f1f5f9; padding: 6px 12px; border-radius: 40px; font-size: 0.75rem; margin-top: 8px; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .order-id { font-family: monospace; background: #eef2ff; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; }
+    .text-muted { color: #64748b; font-size: 0.8rem; }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 12px 20px; border-radius: 40px; font-size: 0.9rem; z-index: 1000; animation: fadeInUp 0.3s ease; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+    .rating-stars { display: flex; justify-content: center; gap: 15px; margin: 15px 0; font-size: 2rem; cursor: pointer; }
+    .rating-stars i { color: #cbd5e1; transition: 0.1s; }
+    .rating-stars i.selected { color: #fbbf24; }
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <header>
+    <h1><i class="fas fa-tshirt"></i> Laundry Tracker</h1>
+    <button id="newOrderBtn" class="new-order-btn" style="display: none;"><i class="fas fa-plus"></i> New Order</button>
+  </header>
+  <main id="appMain"></main>
+</div>
+
+<script>
+  // Mock shops (same as before)
+  const shops = [
+    { id: 1, name: "Sparkle Cleaners", address: "123 Main St", pricePerLb: 1.5, estHours: 4, rating: 4.8, distance: "0.3 mi" },
+    { id: 2, name: "Suds & Duds", address: "456 Oak Ave", pricePerLb: 1.8, estHours: 6, rating: 4.5, distance: "0.7 mi" }
+  ];
+
+  // Helper: get orders from localStorage
+  function getOrders() {
+    const orders = localStorage.getItem("laundryOrders");
+    return orders ? JSON.parse(orders) : [];
+  }
+
+  function saveOrders(orders) {
+    localStorage.setItem("laundryOrders", JSON.stringify(orders));
+  }
+
+  // Helper: add/update an order
+  function saveOrder(order) {
+    const orders = getOrders();
+    const existingIndex = orders.findIndex(o => o.id === order.id);
+    if (existingIndex >= 0) {
+      orders[existingIndex] = order;
+    } else {
+      orders.push(order);
+    }
+    saveOrders(orders);
+  }
+
+  function getOrder(orderId) {
+    return getOrders().find(o => o.id === orderId);
+  }
+
+  // UI state
+  let currentScreen = "shops"; // shops, orderForm, tracking
+  let selectedShop = null;
+  let currentOrder = null;
+
+  function showToast(msg) {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  function notifyReady(order) {
+    if (Notification.permission === "granted") {
+      new Notification("✨ Laundry Ready!", { body: `Order ${order.id} is ready for pickup!` });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
+    showToast(`✨ Order ${order.id} is ready for pickup!`);
+  }
+
+  // Render shops
+  function renderShops() {
+    const main = document.getElementById("appMain");
+    main.innerHTML = `
+      <div class="card">
+        <h3><i class="fas fa-store"></i> Nearby Laundry Shops</h3>
+        <div style="margin-top: 16px;">
+          ${shops.map(shop => `
+            <div class="card shop-item" data-id="${shop.id}">
+              <div class="shop-name">⭐ ${shop.rating}  ${shop.name}</div>
+              <div class="shop-details">
+                <span><i class="fas fa-location-dot"></i> ${shop.distance}</span>
+                <span><i class="fas fa-clock"></i> ~${shop.estHours}h</span>
+                <span class="price"><i class="fas fa-tag"></i> $${shop.pricePerLb}/lb</span>
+              </div>
+              <div class="text-muted">${shop.address}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    document.querySelectorAll('.shop-item').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedShop = shops.find(s => s.id === parseInt(el.dataset.id));
+        renderOrderForm();
+      });
+    });
+    document.getElementById("newOrderBtn").style.display = "none";
+    currentScreen = "shops";
+  }
+
+  function renderOrderForm() {
+    const main = document.getElementById("appMain");
+    main.innerHTML = `
+      <div class="card">
+        <div class="flex-between">
+          <h3><i class="fas fa-tshirt"></i> Drop off at ${selectedShop.name}</h3>
+          <button id="backToShops" class="secondary" style="width: auto; padding: 6px 12px;">Back</button>
+        </div>
+        <div class="form-group">
+          <label>Service type</label>
+          <select id="serviceType">
+            <option value="washFold">Wash & Fold</option>
+            <option value="dryClean">Dry Clean</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Weight (lbs)</label>
+          <input type="number" id="weight" value="5" step="0.5" min="0.5">
+        </div>
+        <div class="form-group">
+          <label>Special instructions</label>
+          <textarea id="instructions" rows="2" placeholder="e.g., no bleach, hang dry..."></textarea>
+        </div>
+        <div class="form-group">
+          <strong>Estimated total: $<span id="estPrice">${(5 * selectedShop.pricePerLb).toFixed(2)}</span></strong>
+        </div>
+        <button id="confirmDropoff">Confirm Drop-off</button>
+      </div>
+    `;
+
+    const weightInput = document.getElementById("weight");
+    const estSpan = document.getElementById("estPrice");
+    const updatePrice = () => {
+      const w = parseFloat(weightInput.value) || 0;
+      estSpan.innerText = (w * selectedShop.pricePerLb).toFixed(2);
+    };
+    weightInput.addEventListener("input", updatePrice);
+    document.getElementById("confirmDropoff").addEventListener("click", () => {
+      const weight = parseFloat(weightInput.value);
+      if (weight <= 0) {
+        showToast("Please enter a valid weight");
+        return;
+      }
+      const orderId = "LAU-" + Math.floor(Math.random() * 9000 + 1000);
+      const now = new Date();
+      const readyEst = new Date(now.getTime() + selectedShop.estHours * 60 * 60 * 1000);
+      const newOrder = {
+        id: orderId,
+        shop: selectedShop,
+        service: document.getElementById("serviceType").value === "washFold" ? "Wash & Fold" : "Dry Clean",
+        weight: weight,
+        instructions: document.getElementById("instructions").value,
+        price: weight * selectedShop.pricePerLb,
+        status: "dropped",
+        createdAt: now.toISOString(),
+        estimatedReady: readyEst.toISOString(),
+        completed: false
+      };
+      saveOrder(newOrder);
+      currentOrder = newOrder;
+      renderTracking();
+    });
+
+    document.getElementById("backToShops").addEventListener("click", () => {
+      selectedShop = null;
+      renderShops();
+    });
+    currentScreen = "orderForm";
+    document.getElementById("newOrderBtn").style.display = "none";
+  }
+
+  function renderTracking() {
+    if (!currentOrder) return renderShops();
+
+    // Refresh order from localStorage in case shop updated it
+    const updated = getOrder(currentOrder.id);
+    if (updated) currentOrder = updated;
+    else return renderShops(); // order gone
+
+    const status = currentOrder.status;
+    const stepMap = { dropped: 1, washing: 2, drying_folding: 3, ready: 4 };
+    const activeStep = stepMap[status] || 1;
+
+    const steps = [
+      { icon: "fa-bag-shopping", label: "Dropped" },
+      { icon: "fa-water", label: "Washing" },
+      { icon: "fa-wind", label: "Drying" },
+      { icon: "fa-circle-check", label: "Ready" }
+    ];
+
+    const timelineHtml = `
+      <div class="timeline">
+        ${steps.map((step, idx) => `
+          <div class="timeline-step ${idx+1 <= activeStep ? 'active' : ''}">
+            <i class="fas ${step.icon}"></i>
+            <div>${step.label}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    const statusText = {
+      dropped: "🧺 Dropped off, waiting for processing",
+      washing: "🧼 Washing in progress",
+      drying_folding: "🌀 Drying & folding",
+      ready: "✅ Ready for pickup"
+    }[status] || "Processing";
+
+    const readyTimeStr = new Date(currentOrder.estimatedReady).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const pickupBtn = status === 'ready' && !currentOrder.completed ? `<button id="pickupBtn" style="background: #2c6e2c;"><i class="fas fa-hand-peace"></i> I'm at the shop - Pick up</button>` : '';
+
+    const main = document.getElementById("appMain");
+    main.innerHTML = `
+      <div class="card">
+        <div class="flex-between">
+          <h3><i class="fas fa-store"></i> ${currentOrder.shop.name}</h3>
+          <span class="order-id">${currentOrder.id}</span>
+        </div>
+        <div><i class="fas fa-weight-hanging"></i> ${currentOrder.weight} lbs • ${currentOrder.service}</div>
+        <div><i class="fas fa-note-sticky"></i> ${currentOrder.instructions || "No special instructions"}</div>
+        <div><i class="fas fa-dollar-sign"></i> $${currentOrder.price.toFixed(2)}</div>
+        <div><i class="fas fa-clock"></i> Est. ready: ${readyTimeStr}</div>
+        <div class="status-badge">${statusText}</div>
+        ${timelineHtml}
+        ${pickupBtn}
+        <div class="text-muted" style="margin-top: 12px;">💡 Shop staff can update status from the shop dashboard.</div>
+      </div>
+    `;
+
+    const pickupBtnEl = document.getElementById("pickupBtn");
+    if (pickupBtnEl) pickupBtnEl.onclick = showPickupRating;
+
+    document.getElementById("newOrderBtn").style.display = "block";
+    currentScreen = "tracking";
+  }
+
+  function showPickupRating() {
+    if (!currentOrder || currentOrder.status !== "ready") return;
+    const main = document.getElementById("appMain");
+    main.innerHTML = `
+      <div class="card" style="text-align: center;">
+        <i class="fas fa-check-circle" style="font-size: 48px; color: #2c6e2c;"></i>
+        <h3>Pickup Confirmed!</h3>
+        <p>Thank you for using ${currentOrder.shop.name}.</p>
+        <div class="rating-stars" id="ratingStars">
+          <i class="far fa-star" data-value="1"></i>
+          <i class="far fa-star" data-value="2"></i>
+          <i class="far fa-star" data-value="3"></i>
+          <i class="far fa-star" data-value="4"></i>
+          <i class="far fa-star" data-value="5"></i>
+        </div>
+        <p style="margin: 10px 0;">Rate your experience</p>
+        <button id="finishOrder">Done</button>
+      </div>
+    `;
+
+    let selectedRating = 0;
+    const stars = document.querySelectorAll("#ratingStars i");
+    stars.forEach(star => {
+      star.addEventListener("click", () => {
+        const val = parseInt(star.dataset.value);
+        selectedRating = val;
+        stars.forEach((s, idx) => {
+          if (idx < val) s.className = "fas fa-star selected";
+          else s.className = "far fa-star";
+        });
+      });
+    });
+
+    document.getElementById("finishOrder").addEventListener("click", () => {
+      if (selectedRating > 0) showToast(`⭐ Rated ${selectedRating} stars. Thanks!`);
+      currentOrder.completed = true;
+      saveOrder(currentOrder);
+      currentOrder = null;
+      selectedShop = null;
+      renderShops();
+    });
+  }
+
+  // New order button
+  document.getElementById("newOrderBtn").addEventListener("click", () => {
+    if (currentOrder && !currentOrder.completed && confirm("Start a new order? Current order will be abandoned.")) {
+      currentOrder = null;
+      selectedShop = null;
+      renderShops();
+    } else if (!currentOrder) {
+      renderShops();
+    }
+  });
+
+  // Check for order from query param (for deep linking from shop)
+  const urlParams = new URLSearchParams(window.location.search);
+  const orderId = urlParams.get('order');
+  if (orderId) {
+    const existing = getOrder(orderId);
+    if (existing) {
+      currentOrder = existing;
+      renderTracking();
+    } else {
+      renderShops();
+    }
+  } else {
+    renderShops();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laundry Tracker – Shop Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #eef2f7;
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header {
+      background: #2c3e66;
+      color: white;
+      padding: 20px;
+      border-radius: 24px 24px 0 0;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 8px; }
+    .refresh-btn {
+      background: white;
+      color: #2c3e66;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 40px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .orders-section {
+      background: white;
+      border-radius: 24px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    h2 { margin-bottom: 16px; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+    .order-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 16px;
+      transition: 0.2s;
+    }
+    .order-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .order-id { font-family: monospace; font-weight: bold; background: #eef2ff; padding: 4px 8px; border-radius: 12px; }
+    .shop-name { font-weight: 600; }
+    .order-details {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 12px 0;
+      font-size: 0.9rem;
+      color: #4b5563;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 40px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: #f1f5f9;
+    }
+    .status-badge.dropped { background: #fee2e2; color: #991b1b; }
+    .status-badge.washing { background: #fff3e3; color: #b45309; }
+    .status-badge.drying_folding { background: #e0f2fe; color: #075985; }
+    .status-badge.ready { background: #dcfce7; color: #166534; }
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .action-btn {
+      background: white;
+      border: 1px solid #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 40px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: 0.2s;
+    }
+    .action-btn:hover { background: #f1f5f9; }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .scan-section {
+      background: #f8fafc;
+      border-radius: 20px;
+      padding: 16px;
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .scan-input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 40px;
+      font-size: 1rem;
+    }
+    .scan-btn {
+      background: #2c3e66;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 40px;
+      cursor: pointer;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 40px;
+      z-index: 1000;
+      animation: fadeInUp 0.3s;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      .order-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><i class="fas fa-store"></i> Shop Dashboard</h1>
+    <button class="refresh-btn" onclick="loadOrders()"><i class="fas fa-sync-alt"></i> Refresh</button>
+  </header>
+
+  <div class="orders-section">
+    <h2><i class="fas fa-hourglass-half"></i> Pending Processing</h2>
+    <div id="pendingOrders"></div>
+  </div>
+
+  <div class="orders-section">
+    <h2><i class="fas fa-gear"></i> In Progress</h2>
+    <div id="inProgressOrders"></div>
+  </div>
+
+  <div class="orders-section">
+    <h2><i class="fas fa-check-circle"></i> Ready for Pickup</h2>
+    <div id="readyOrders"></div>
+  </div>
+
+  <div class="orders-section">
+    <h2><i class="fas fa-history"></i> Completed</h2>
+    <div id="completedOrders"></div>
+  </div>
+
+  <div class="scan-section">
+    <input type="text" id="scanOrderId" class="scan-input" placeholder="Enter Order ID (e.g., LAU-1234)">
+    <button class="scan-btn" onclick="scanOrder()"><i class="fas fa-qrcode"></i> Find Order</button>
+  </div>
+</div>
+
+<script>
+  function getOrders() {
+    const orders = localStorage.getItem("laundryOrders");
+    return orders ? JSON.parse(orders) : [];
+  }
+
+  function saveOrders(orders) {
+    localStorage.setItem("laundryOrders", JSON.stringify(orders));
+  }
+
+  function saveOrder(order) {
+    const orders = getOrders();
+    const index = orders.findIndex(o => o.id === order.id);
+    if (index !== -1) orders[index] = order;
+    else orders.push(order);
+    saveOrders(orders);
+  }
+
+  function showToast(msg) {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  function updateOrderStatus(orderId, newStatus) {
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    if (!order) {
+      showToast("Order not found");
+      return;
+    }
+    if (order.completed) {
+      showToast("Cannot update a completed order");
+      return;
+    }
+    order.status = newStatus;
+    if (newStatus === 'ready') {
+      // Optionally, you could notify customer here, but they will see it on refresh.
+      showToast(`Order ${orderId} marked as READY. Customer will be notified.`);
+    }
+    saveOrders(orders);
+    loadOrders(); // refresh UI
+  }
+
+  function completeOrder(orderId) {
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    if (order && order.status === 'ready') {
+      order.completed = true;
+      saveOrders(orders);
+      loadOrders();
+      showToast(`Order ${orderId} marked as completed.`);
+    } else {
+      showToast("Order must be 'Ready' before completing.");
+    }
+  }
+
+  function loadOrders() {
+    const orders = getOrders();
+    // Sort by creation date descending (newest first)
+    orders.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const pending = orders.filter(o => !o.completed && o.status === 'dropped');
+    const inProgress = orders.filter(o => !o.completed && (o.status === 'washing' || o.status === 'drying_folding'));
+    const ready = orders.filter(o => !o.completed && o.status === 'ready');
+    const completed = orders.filter(o => o.completed === true);
+
+    document.getElementById('pendingOrders').innerHTML = renderOrderList(pending);
+    document.getElementById('inProgressOrders').innerHTML = renderOrderList(inProgress, true);
+    document.getElementById('readyOrders').innerHTML = renderOrderList(ready, true);
+    document.getElementById('completedOrders').innerHTML = renderOrderList(completed);
+  }
+
+  function renderOrderList(orders, showCompleteButton = false) {
+    if (orders.length === 0) return '<div class="text-muted" style="padding: 16px; text-align: center;">No orders</div>';
+    return orders.map(order => `
+      <div class="order-card">
+        <div class="order-header">
+          <span class="order-id">${order.id}</span>
+          <span class="shop-name"><i class="fas fa-store"></i> ${order.shop.name}</span>
+        </div>
+        <div class="order-details">
+          <span><i class="fas fa-weight-hanging"></i> ${order.weight} lbs</span>
+          <span><i class="fas fa-tag"></i> ${order.service}</span>
+          <span><i class="fas fa-clock"></i> Est: ${new Date(order.estimatedReady).toLocaleTimeString()}</span>
+        </div>
+        <div class="order-details">
+          <span><i class="fas fa-note-sticky"></i> ${order.instructions || "No instructions"}</span>
+        </div>
+        <div>
+          <span class="status-badge ${order.status.replace('_','-')}">${formatStatus(order.status)}</span>
+        </div>
+        <div class="action-buttons">
+          ${order.status === 'dropped' ? `<button class="action-btn" onclick="updateOrderStatus('${order.id}', 'washing')">Start Washing</button>` : ''}
+          ${order.status === 'washing' ? `<button class="action-btn" onclick="updateOrderStatus('${order.id}', 'drying_folding')">Mark Drying</button>` : ''}
+          ${order.status === 'drying_folding' ? `<button class="action-btn" onclick="updateOrderStatus('${order.id}', 'ready')">Mark Ready</button>` : ''}
+          ${order.status === 'ready' && !order.completed && showCompleteButton ? `<button class="action-btn" onclick="completeOrder('${order.id}')">Complete Pickup</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function formatStatus(status) {
+    const map = {
+      dropped: '🧺 Dropped off',
+      washing: '🧼 Washing',
+      drying_folding: '🌀 Drying & Folding',
+      ready: '✅ Ready'
+    };
+    return map[status] || status;
+  }
+
+  function scanOrder() {
+    const orderId = document.getElementById('scanOrderId').value.trim();
+    if (!orderId) {
+      showToast("Enter an Order ID");
+      return;
+    }
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      // Highlight the order card? For simplicity, we can just show an alert.
+      showToast(`Order ${orderId}: ${formatStatus(order.status)}`);
+      // Optionally scroll to it? We'll keep simple.
+    } else {
+      showToast(`Order ${orderId} not found`);
+    }
+  }
+
+  // Auto-refresh every 5 seconds (for demo)
+  setInterval(loadOrders, 5000);
+  loadOrders();
+</script>
+</body>
+</html>
